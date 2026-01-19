@@ -46,17 +46,6 @@ function removeCondition(button) {
     }
 }
 
-// Sanitize user input for XML
-function sanitizeXML(text) {
-    if (!text) return '';
-    return text
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&apos;');
-}
-
 // Validate identifier (for table names, column names, etc.)
 function validateIdentifier(text) {
     if (!text) return false;
@@ -214,6 +203,11 @@ function buildWhereClause() {
         const value = condition.querySelector('.where-value').value.trim();
         
         if (column && value) {
+            // Validate column name to prevent SQL injection
+            if (!validateIdentifier(column)) {
+                alert(`칼럼명 "${column}"은(는) 영문자, 숫자, 언더스코어(_), 점(.)만 사용할 수 있습니다.`);
+                return;
+            }
             validConditions.push({ column, operator, value });
         }
     });
@@ -239,11 +233,13 @@ function buildWhereClause() {
 
 // Get test condition for MyBatis <if> tag
 function getTestCondition(value) {
-    // Extract parameter name from #{paramName}
-    const match = value.match(/#{(\w+)}/);
+    // Extract parameter name from #{paramName} or #{nested.property}
+    const match = value.match(/#{([^}]+)}/);
     if (match) {
         const paramName = match[1];
-        return `${paramName} != null and ${paramName} != ''`;
+        // For nested properties, check the root property
+        const rootParam = paramName.split('.')[0];
+        return `${rootParam} != null and ${rootParam} != ''`;
     }
     return 'true';
 }
