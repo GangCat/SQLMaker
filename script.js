@@ -46,6 +46,24 @@ function removeCondition(button) {
     }
 }
 
+// Sanitize user input for XML
+function sanitizeXML(text) {
+    if (!text) return '';
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+}
+
+// Validate identifier (for table names, column names, etc.)
+function validateIdentifier(text) {
+    if (!text) return false;
+    // Allow alphanumeric, underscore, and dot (for qualified names)
+    return /^[a-zA-Z0-9_.]+$/.test(text);
+}
+
 // Generate SQL query
 function generateSQL() {
     const queryType = document.getElementById('queryType').value;
@@ -59,8 +77,18 @@ function generateSQL() {
         return;
     }
 
+    if (!validateIdentifier(tableName)) {
+        alert('테이블 명은 영문자, 숫자, 언더스코어(_), 점(.)만 사용할 수 있습니다.');
+        return;
+    }
+
     if (!mybatisId) {
         alert('MyBatis Statement ID를 입력해주세요.');
+        return;
+    }
+
+    if (!validateIdentifier(mybatisId)) {
+        alert('MyBatis Statement ID는 영문자, 숫자, 언더스코어(_), 점(.)만 사용할 수 있습니다.');
         return;
     }
 
@@ -192,11 +220,13 @@ function buildWhereClause() {
     
     if (validConditions.length > 0) {
         validConditions.forEach((cond, index) => {
-            if (index > 0) {
-                whereClause += '        <if test="true">AND </if>\n';
-            }
             whereClause += `        <if test="${getTestCondition(cond.value)}">\n`;
-            whereClause += `            ${cond.column} ${cond.operator} ${cond.value}\n`;
+            if (index > 0) {
+                whereClause += `            AND `;
+            } else {
+                whereClause += `            `;
+            }
+            whereClause += `${cond.column} ${cond.operator} ${cond.value}\n`;
             whereClause += `        </if>`;
             if (index < validConditions.length - 1) {
                 whereClause += '\n';
@@ -231,19 +261,53 @@ function copyToClipboard() {
     const text = sqlOutput.textContent;
     const copyMessage = document.getElementById('copyMessage');
     
-    navigator.clipboard.writeText(text).then(() => {
-        copyMessage.textContent = '✓ 클립보드에 복사되었습니다!';
-        copyMessage.className = 'copy-message success show';
-        setTimeout(() => {
-            copyMessage.className = 'copy-message';
-        }, 3000);
-    }).catch(err => {
-        copyMessage.textContent = '✗ 복사에 실패했습니다.';
-        copyMessage.className = 'copy-message error show';
-        setTimeout(() => {
-            copyMessage.className = 'copy-message';
-        }, 3000);
-    });
+    // Try modern clipboard API first
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+            copyMessage.textContent = '✓ 클립보드에 복사되었습니다!';
+            copyMessage.className = 'copy-message success show';
+            setTimeout(() => {
+                copyMessage.className = 'copy-message';
+            }, 3000);
+        }).catch(err => {
+            copyMessage.textContent = '✗ 복사에 실패했습니다.';
+            copyMessage.className = 'copy-message error show';
+            setTimeout(() => {
+                copyMessage.className = 'copy-message';
+            }, 3000);
+        });
+    } else {
+        // Fallback for older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-9999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        
+        try {
+            const successful = document.execCommand('copy');
+            if (successful) {
+                copyMessage.textContent = '✓ 클립보드에 복사되었습니다!';
+                copyMessage.className = 'copy-message success show';
+            } else {
+                copyMessage.textContent = '✗ 복사에 실패했습니다.';
+                copyMessage.className = 'copy-message error show';
+            }
+            setTimeout(() => {
+                copyMessage.className = 'copy-message';
+            }, 3000);
+        } catch (err) {
+            copyMessage.textContent = '✗ 복사에 실패했습니다.';
+            copyMessage.className = 'copy-message error show';
+            setTimeout(() => {
+                copyMessage.className = 'copy-message';
+            }, 3000);
+        }
+        
+        document.body.removeChild(textArea);
+    }
 }
 
 // Initialize form on page load
