@@ -18,13 +18,35 @@ const normalizeColumns = (value) =>
 
 const toSqlIdentifier = (value) => value.trim();
 
-const buildSelect = (table, columns, where) => {
+const buildSelect = (
+  table,
+  columns,
+  where,
+  leftJoin,
+  parameterType,
+  resultType
+) => {
   const selectColumns = columns.length ? columns.join(", ") : "*";
+  const joinTable = leftJoin.table.trim();
+  const joinOn = leftJoin.on.trim();
+  const joinClause =
+    joinTable && joinOn ? `  LEFT JOIN ${joinTable} ON ${joinOn}` : null;
+  const parameterTypeAttr = parameterType.trim()
+    ? ` parameterType=\"${parameterType.trim()}\"`
+    : "";
+  const resultTypeAttr = resultType.trim()
+    ? ` resultType=\"${resultType.trim()}\"`
+    : "";
+
   const lines = [
-    `<select id=\"select${table}\" resultType=\"map\">`,
+    `<select id=\"select${table}\"${resultTypeAttr}${parameterTypeAttr}>`,
     `  SELECT ${selectColumns}`,
     `  FROM ${table}`
   ];
+
+  if (joinClause) {
+    lines.push(joinClause);
+  }
 
   if (where.trim()) {
     lines.push("  <where>");
@@ -36,21 +58,27 @@ const buildSelect = (table, columns, where) => {
   return lines.join("\n");
 };
 
-const buildInsert = (table, columns) => {
+const buildInsert = (table, columns, parameterType) => {
   const colList = columns.join(", ");
   const values = columns.map((col) => `#{${col}}`).join(", ");
+  const parameterTypeAttr = parameterType.trim()
+    ? ` parameterType=\"${parameterType.trim()}\"`
+    : "";
 
   return [
-    `<insert id=\"insert${table}\">`,
+    `<insert id=\"insert${table}\"${parameterTypeAttr}>`,
     `  INSERT INTO ${table} (${colList})`,
     `  VALUES (${values})`,
     "</insert>"
   ].join("\n");
 };
 
-const buildUpdate = (table, columns, where) => {
+const buildUpdate = (table, columns, where, parameterType) => {
+  const parameterTypeAttr = parameterType.trim()
+    ? ` parameterType=\"${parameterType.trim()}\"`
+    : "";
   const lines = [
-    `<update id=\"update${table}\">`,
+    `<update id=\"update${table}\"${parameterTypeAttr}>`,
     `  UPDATE ${table}`,
     "  <set>",
     ...columns.map((col) => `    ${col} = #{${col}},`),
@@ -67,9 +95,12 @@ const buildUpdate = (table, columns, where) => {
   return lines.join("\n");
 };
 
-const buildDelete = (table, where) => {
+const buildDelete = (table, where, parameterType) => {
+  const parameterTypeAttr = parameterType.trim()
+    ? ` parameterType=\"${parameterType.trim()}\"`
+    : "";
   const lines = [
-    `<delete id=\"delete${table}\">`,
+    `<delete id=\"delete${table}\"${parameterTypeAttr}>`,
     `  DELETE FROM ${table}`
   ];
 
@@ -83,7 +114,15 @@ const buildDelete = (table, where) => {
   return lines.join("\n");
 };
 
-const buildSql = ({ operation, tableName, columns, where }) => {
+const buildSql = ({
+  operation,
+  tableName,
+  columns,
+  where,
+  leftJoin,
+  parameterType,
+  resultType
+}) => {
   if (!tableName.trim()) {
     return "테이블명을 입력하면 마이바티스 SQL이 생성됩니다.";
   }
@@ -92,13 +131,20 @@ const buildSql = ({ operation, tableName, columns, where }) => {
 
   switch (operation) {
     case "select":
-      return buildSelect(table, columns, where);
+      return buildSelect(
+        table,
+        columns,
+        where,
+        leftJoin,
+        parameterType,
+        resultType
+      );
     case "insert":
-      return buildInsert(table, columns);
+      return buildInsert(table, columns, parameterType);
     case "update":
-      return buildUpdate(table, columns, where);
+      return buildUpdate(table, columns, where, parameterType);
     case "delete":
-      return buildDelete(table, where);
+      return buildDelete(table, where, parameterType);
     default:
       return "지원하지 않는 타입입니다.";
   }
@@ -109,6 +155,10 @@ const App = () => {
   const [tableName, setTableName] = useState("user");
   const [columnInput, setColumnInput] = useState(defaultColumns);
   const [whereClause, setWhereClause] = useState(defaultWhere);
+  const [parameterType, setParameterType] = useState("map");
+  const [resultType, setResultType] = useState("map");
+  const [leftJoinTable, setLeftJoinTable] = useState("");
+  const [leftJoinOn, setLeftJoinOn] = useState("");
 
   const columns = useMemo(() => normalizeColumns(columnInput), [columnInput]);
 
@@ -118,12 +168,29 @@ const App = () => {
         operation,
         tableName,
         columns,
-        where: whereClause
+        where: whereClause,
+        leftJoin: {
+          table: leftJoinTable,
+          on: leftJoinOn
+        },
+        parameterType,
+        resultType
       }),
-    [operation, tableName, columns, whereClause]
+    [
+      operation,
+      tableName,
+      columns,
+      whereClause,
+      leftJoinTable,
+      leftJoinOn,
+      parameterType,
+      resultType
+    ]
   );
 
   const showWhere = operation !== "insert";
+  const showJoin = operation === "select";
+  const showResultType = operation === "select";
 
   return (
     <div className="app">
@@ -170,6 +237,34 @@ const App = () => {
           </div>
 
           <div className="field">
+            <label htmlFor="parameterType">parameterType</label>
+            <input
+              id="parameterType"
+              value={parameterType}
+              onChange={(event) => setParameterType(event.target.value)}
+              placeholder="예: map"
+            />
+            <p className="helper">
+              MyBatis 매퍼에 사용할 파라미터 타입을 입력합니다.
+            </p>
+          </div>
+
+          {showResultType && (
+            <div className="field">
+              <label htmlFor="resultType">resultType</label>
+              <input
+                id="resultType"
+                value={resultType}
+                onChange={(event) => setResultType(event.target.value)}
+                placeholder="예: map"
+              />
+              <p className="helper">
+                SELECT 결과를 매핑할 타입을 입력합니다.
+              </p>
+            </div>
+          )}
+
+          <div className="field">
             <label htmlFor="columns">컬럼명 (쉼표로 구분)</label>
             <textarea
               id="columns"
@@ -180,6 +275,27 @@ const App = () => {
             />
             <p className="helper">입력한 컬럼은 INSERT/UPDATE에 사용됩니다.</p>
           </div>
+
+          {showJoin && (
+            <div className="field">
+              <label>LEFT JOIN</label>
+              <div className="inline-field">
+                <input
+                  value={leftJoinTable}
+                  onChange={(event) => setLeftJoinTable(event.target.value)}
+                  placeholder="조인할 테이블명"
+                />
+                <input
+                  value={leftJoinOn}
+                  onChange={(event) => setLeftJoinOn(event.target.value)}
+                  placeholder="조인 조건 (예: user.id = order.user_id)"
+                />
+              </div>
+              <p className="helper">
+                테이블과 조건을 모두 입력하면 LEFT JOIN이 추가됩니다.
+              </p>
+            </div>
+          )}
 
           {showWhere && (
             <div className="field">

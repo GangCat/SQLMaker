@@ -104,6 +104,12 @@ textarea:focus {
   color: #667085;
 }
 
+.inline-field {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
 .chips {
   display: flex;
   flex-wrap: wrap;
